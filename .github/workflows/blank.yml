@@ -1,0 +1,54 @@
+name: Redep
+
+on: workflow_dispatch
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+    timeout-minutes: 9999
+
+    steps:
+      - name: Download Ngrok.
+      run: |
+        Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+
+      - name: Extracting Ngrok
+        run: Expand-Archive ngrok.zip
+
+      - name: Connect To Account Ngrok File.
+        run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Turn on Access RDP.
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+
+      - name: Make Tunnel.
+        run: |
+           Start-Process Powershell -ArgumentList '-Noexit -Command ".\ngrok\ngrok.exe tcp --region ap 3389"'
+           cmd /c REG ADD "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /V EnableAutoTray /T REG_DWORD /D 0 /F > out.txt 2>&1
+           cmd /c net user DWG @Subscribe
+           cmd /c net localgroup administrators DWG /add >nul
+           cmd /c net user installer /delete
+           cmd /c diskperf -Y >nul
+           cmd /c sc config Audiosrv start= auto >nul
+           cmd /c sc start audiosrv >nul
+           cmd /c ICACLS C:\Windows\Temp /grant DWG:F >nul
+           cmd /c ICACLS C:\Windows\installer /grant DWG:F >nul
+           cmd echo Successfully Installed !, If the RDP is Dead, Please Rebuild Again!
+
+      - name: IP and Username RDP.
+          run: |
+            cmd echo IP:
+            cmd tasklist | find /i "ngrok.exe" >Nul && curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url || echo "Unable to get the NGROK tunnel, make sure NGROK_AUTH_TOKEN correct in Settings> Secrets> Repository secret. Maybe previous VM is still running: https://dashboard.ngrok.com/status/tunnels "
+            cmd echo Username: DWG
+            cmd echo Password: @Subscribe
+
+      - name: Connect To Your RDP.
+        run: |
+          cmd ping google.com -t > nul
+          cmd ping google.com -t > nul
